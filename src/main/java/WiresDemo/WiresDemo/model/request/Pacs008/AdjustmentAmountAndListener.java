@@ -1,0 +1,22 @@
+package WiresDemo.WiresDemo.model.request.Pacs008;
+
+
+import com.fasterxml.jackson.annotation.JsonInclude;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+@Getter
+@Setter
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+@JsonInclude(JsonInclude.Include.NON_NULL)
+public class AdjustmentAmountAndListener {
+    private Amount amount;
+    private String credit_debit_indicator;
+    private String reason;
+    private String additional_information;
+}

@@ -1,0 +1,37 @@
+{
+  "wire_payment_status_report":{
+    "group_header":{
+      "message_identification":"<Maximum 16 Alphanumerical (Random) Characters>",
+      "creation_datetime":"2020-01-29T20:34:51.002Z",
+      "related_reference":{
+        "swift_msg_type": "<ORIGINATING MSG TYPE, i.e. MT103>",
+        "transaction_reference_no":"<ORIGINAL MT Msg Transaction Reference Number>"
+      }
+    },
+  "transaction_information_and_status":[
+    {
+      "original_group_information":{
+        "original_message_identification":"<Maximum 16 Alphanumerical (Random) Characters>",
+        "original_message_name_identification":"<ORIGINATING MSG TYPE, i.e. MT103>"
+      },
+      "transaction_status":"PDNG",
+      "status_reason_information":[
+        {
+          "reason":{
+            "proprietary":"566",
+            "description_en": "explaination of error code"
+          }
+        },
+        {
+          "reason":{
+            "proprietary":"2007",
+            "description_en": "explaination of error code"
+          }
+        }],
+      "acceptance_datetime":"acceptance datetime",
+      "clearing_system_reference":"<Maximum 16 Alphanumerical (Random) Characters"
+    }
+  ]
+},
+  "payment_status":"<PASS OR FAIL>"
+}
