@@ -26,10 +26,20 @@ import com.prowidesoftware.swift.model.SwiftMessage;
 
 import javax.validation.Valid;
 import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVPrinter;
+
+import java.io.*;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.util.Arrays;
 
 @RestController
 @RequestMapping("/api")
@@ -64,10 +74,17 @@ public class WiresDemoController {
         log.info("WireMT103 JSON"+ MT.toJson());
 
         List<String> errorCodes = this.paymentRequestValidator.validate(MT);
+        if (errorCodes.isEmpty()){
+            this.prepareAccountingLogs("Accounting_Logs.csv", MT);
+        }
         return produceResponse(wireMT103Payload,MT,errorCodes);
+
     }
 
     private Mt199 produceResponse(@Valid WireMT103Payload wireMT103Payload, SwiftMessage mt103, List<String> errorCodes) {
+        LocalDate todayDate = LocalDate.now();
+        String localDate = todayDate.format(DateTimeFormatter.ofPattern("yyyy/MM/dd"));
+
         String filename = "mt199_sample.json";
         ClassLoader classLoader = new WiresDemoApplication().getClass().getClassLoader();
         File file = new File(classLoader.getResource(filename).getFile());
@@ -81,7 +98,7 @@ public class WiresDemoController {
 
         GroupHeader group_header = GroupHeader.builder()
                 .message_identification(mt103.getBlock1().getLogicalTerminal())
-                .creation_datetime("2020/23/07")
+                .creation_datetime(localDate)
                 .related_reference(new Related_reference().builder().swift_msg_type(mt103.getType()).build())
                 .build();
         mt199.getWire_payment_status_report().setGroup_header(group_header);
@@ -280,4 +297,81 @@ public class WiresDemoController {
         return new Gson().fromJson(json, Pacs002.class);
     }
 
+    private void prepareAccountingLogs(String fileName, SwiftMessage MT103) throws IOException {
+        String SAMPLE_CSV_FILE = "D:\\WiresPOC\\POC\\Logs\\" + fileName;
+
+        String senderAccount = "";
+        String receiverAccount = "";
+        String senderTransitNumber = "";
+        String receiverTransitNumber = "";
+        String paymentReference = "";
+        String paymentAmount = "";
+        String paymentCurrencyCode = "";
+        String swiftReferenceCode = "CA";
+
+        // Acquire Sender Account
+        if(MT103.getBlock4().getFieldByName("50A") != null){
+            senderAccount = MT103.getBlock4().getFieldByName("50A").getComponent(1);
+        }
+        else if(MT103.getBlock4().getFieldByName("50F") != null){
+            senderAccount = MT103.getBlock4().getFieldByName("50F").getComponent(1);
+        }
+        else if(MT103.getBlock4().getFieldByName("50K") != null){
+            senderAccount = MT103.getBlock4().getFieldByName("50K").getComponent(1);
+        }
+
+        // Acquire Receiver Account
+        if(MT103.getBlock4().getFieldByName("59") != null){
+            receiverAccount = MT103.getBlock4().getFieldByName("59").getComponent(1);
+        }
+        else if(MT103.getBlock4().getFieldByName("59A") != null){
+            receiverAccount = MT103.getBlock4().getFieldByName("59A").getComponent(1);
+        }
+        else if(MT103.getBlock4().getFieldByName("59F") != null){
+            receiverAccount = MT103.getBlock4().getFieldByName("59F").getComponent(1);
+        }
+
+        LocalDate todayDate = LocalDate.now();
+        String postingDate = todayDate.format(DateTimeFormatter.ofPattern("yyMMdd"));
+        String valueDate = todayDate.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+
+        if(senderAccount.length() > 7){
+            senderTransitNumber = senderAccount.substring(2,7);
+        }
+        if(receiverAccount.length() > 7){
+            receiverTransitNumber = receiverAccount.substring(2,7);
+        }
+
+        if(MT103.getBlock1().getLogicalTerminal() != null){
+            paymentReference = MT103.getBlock1().getLogicalTerminal();
+        }
+
+        if(MT103.getBlock4().getFieldByName("32A") != null){
+            paymentAmount = MT103.getBlock4().getFieldByName("32A").getComponent(3);
+        }
+
+        if(MT103.getBlock4().getFieldByName("32A") != null){
+            paymentCurrencyCode = MT103.getBlock4().getFieldByName("32A").getComponent(2);
+        }
+
+        Integer fictitousNumber = 2057542;
+        fictitousNumber++;
+        String swiftReferenceCodeFinal = swiftReferenceCode + postingDate + fictitousNumber.toString();
+        try (
+                BufferedWriter writer = Files.newBufferedWriter(Paths.get(SAMPLE_CSV_FILE));
+
+                CSVPrinter csvPrinter = new CSVPrinter(writer, CSVFormat.DEFAULT
+                        .withHeader("Account Number","Posting Date","Value Date","Transit Number",
+                                "Payment Reference","Debit Or Credit","Amount","Curr Code","Swift Reference Code"
+                        ));
+        ) {
+            csvPrinter.printRecord(senderAccount, postingDate, valueDate, senderTransitNumber, paymentReference,
+            "DB", paymentAmount, paymentCurrencyCode, swiftReferenceCodeFinal);
+
+            csvPrinter.printRecord(receiverAccount, postingDate, valueDate, receiverTransitNumber, paymentReference,
+                    "CR", paymentAmount, paymentCurrencyCode, swiftReferenceCodeFinal);
+
+            csvPrinter.flush();
+        }
+    }
 }
