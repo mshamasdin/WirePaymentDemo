@@ -70,13 +70,13 @@ public class PaymentRequestValidator {
         return false;
     }
 
-    private boolean validateSenderTxData(SwiftMessage mt) {
-        if(mt.getBlock4() != null && mt.getBlock4().getFieldByName("32A") != null){
-            Field senderTx = mt.getBlock4().getFieldByName("32A");
+    private boolean validateSenderTxData(SwiftMessage MT103) {
+        if(MT103.getBlock4() != null && MT103.getBlock4().getFieldByName("32A") != null){
+            Field senderTx = MT103.getBlock4().getFieldByName("32A");
             if(!senderTx.isEmpty()) {
                 List<String> components = senderTx.getComponents();
                 //validate date
-                if(NumberUtils.isNumber(components.get(0))) {
+                if(GenericValidator.isDate(components.get(0),"YYMMdd", true)) {
                     return true;
                 }
                 infractions.add("T50");
