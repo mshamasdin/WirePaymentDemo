@@ -75,7 +75,9 @@ public class WiresDemoController {
 
         List<String> errorCodes = this.paymentRequestValidator.validate(MT);
         if (errorCodes.isEmpty()){
-            this.prepareAccountingLogs("Accounting_Logs.csv", MT);
+            Integer fictitiousNumber = 2057542;
+            this.prepareAccountingLogs("Accounting_Logs.csv", MT, fictitiousNumber);
+            fictitiousNumber++;
         }
         return produceResponse(wireMT103Payload,MT,errorCodes);
 
@@ -84,7 +86,10 @@ public class WiresDemoController {
     private Mt199 produceResponse(@Valid WireMT103Payload wireMT103Payload, SwiftMessage mt103, List<String> errorCodes) {
         LocalDate todayDate = LocalDate.now();
         String localDate = todayDate.format(DateTimeFormatter.ofPattern("yyyy/MM/dd"));
-
+        String transactionStatus = "PDNG";
+        if(errorCodes.contains("MT019A")){  //If Sanctions Clearance Fails, abort Transaction
+            transactionStatus = "ABRT";
+        }
         String filename = "mt199_sample.json";
         ClassLoader classLoader = new WiresDemoApplication().getClass().getClassLoader();
         File file = new File(classLoader.getResource(filename).getFile());
@@ -109,7 +114,7 @@ public class WiresDemoController {
                         .original_message_identification(mt103.getBlock1().getLogicalTerminal())
                         .original_message_name_identification(mt103.getType())
                         .build())
-                .transaction_status("PDNG")
+                .transaction_status(transactionStatus)
                 .acceptance_datetime("acceptance datetime")
                 .clearing_system_reference("clearing_system_reference")
                 .build();
@@ -122,7 +127,7 @@ public class WiresDemoController {
         if(errorCodes != null && !errorCodes.isEmpty()) {
             statusList = new ArrayList<>();
             TransactionInformationStatus status = mt199.getWire_payment_status_report().getTransaction_information_and_status().get(0);
-            status.setTransaction_status("PDNG");
+            status.setTransaction_status(transactionStatus);
             ArrayList<StatusReasonInformation> statusReasonInformations = new ArrayList<>();
             for (String errorCode : errorCodes){
                 statusReasonInformations.add(StatusReasonInformation.builder()
@@ -297,7 +302,7 @@ public class WiresDemoController {
         return new Gson().fromJson(json, Pacs002.class);
     }
 
-    private void prepareAccountingLogs(String fileName, SwiftMessage MT103) throws IOException {
+    private void prepareAccountingLogs(String fileName, SwiftMessage MT103, Integer fictitiousNumber) throws IOException {
         String SAMPLE_CSV_FILE = "D:\\WiresPOC\\POC\\Logs\\" + fileName;
 
         String senderAccount = "";
@@ -354,9 +359,7 @@ public class WiresDemoController {
             paymentCurrencyCode = MT103.getBlock4().getFieldByName("32A").getComponent(2);
         }
 
-        Integer fictitousNumber = 2057542;
-        fictitousNumber++;
-        String swiftReferenceCodeFinal = swiftReferenceCode + postingDate + fictitousNumber.toString();
+        String swiftReferenceCodeFinal = swiftReferenceCode + postingDate + fictitiousNumber.toString();
         try (
                 BufferedWriter writer = Files.newBufferedWriter(Paths.get(SAMPLE_CSV_FILE));
 

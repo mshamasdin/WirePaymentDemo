@@ -21,10 +21,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.text.NumberFormat;
 import java.text.ParseException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
+import java.util.*;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -48,10 +45,13 @@ public class PaymentRequestValidator {
         return infractions;
     }
 
-    public List<String> validate(SwiftMessage MT) {
+    public List<String> validate(SwiftMessage MT) throws IOException {
         validateMessageType(MT);
         isSenderReferenceExists(MT);
         isBankOperationCodeExists(MT);
+        if(!validateSanctionClearing(MT)){
+            return infractions;
+        }
         validateSenderTxData(MT);
         validatePayerInfo(MT);
         return infractions;
@@ -108,6 +108,66 @@ public class PaymentRequestValidator {
         } catch (IOException e) {
             infractions.add("E348");
         }
+    }
+
+    private boolean validateSanctionClearing(SwiftMessage mt) throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        ClassLoader classLoader = new PaymentRequestValidator().getClass().getClassLoader();
+        /*try {*/
+        File file = new File(classLoader.getResource("sanctions_list.json").getFile());
+        ObjectMapper objectMapper = new ObjectMapper();
+        Map<String, String> sanctionScreeningMap = objectMapper.readValue(new String(Files.readAllBytes(file.toPath())), new TypeReference<Map<String,String>>(){});
+
+        if (mt.getBlock4() != null) {
+            if (mt.getBlock4().getFieldByName("59") != null) {
+                Field receiverDetails = mt.getBlock4().getFieldByName("59");
+                if (!receiverDetails.isEmpty()) {
+                    List<String> components = receiverDetails.getComponents();
+                    List<String> upperCaseComponents = this.componentsToUpperCase(components);
+                    System.out.println(">>>>");
+                    System.out.println(upperCaseComponents);
+
+                    boolean nameMatch = false;
+                    boolean countryMatch = false;
+
+
+                    for (int i = 0; i < upperCaseComponents.size(); i++) {
+                        if(StringUtils.containsIgnoreCase(upperCaseComponents.get(i), sanctionScreeningMap.get("name001"))){
+                            nameMatch = true;
+                        }
+                        if(StringUtils.containsIgnoreCase(upperCaseComponents.get(i), sanctionScreeningMap.get("country001"))){
+                            countryMatch = true;
+                        }
+                    }
+                    //System.out.printf("%b %b", nameMatch, countryMatch);
+
+                    if (nameMatch && countryMatch){
+                        infractions.add("MT019A");
+                        return false;
+                    }else{
+                        nameMatch = false;
+                        countryMatch = false;
+                    }
+
+                    for (int i = 0; i < upperCaseComponents.size(); i++) {
+                        if(StringUtils.containsIgnoreCase(upperCaseComponents.get(i), sanctionScreeningMap.get("name002"))){
+                            nameMatch = true;
+                        }
+                        if(StringUtils.containsIgnoreCase(upperCaseComponents.get(i), sanctionScreeningMap.get("country002"))){
+                            countryMatch = true;
+                        }
+                    }
+
+                    if (nameMatch && countryMatch){
+                        infractions.add("MT019A");
+                        return false;
+                    }else{
+                        return true;
+                    }
+                }
+            }
+        }
+        return true;
     }
 
     private static Locale getLocale(String strCode) {
@@ -301,6 +361,16 @@ public class PaymentRequestValidator {
 
     public void clearErrorCodes() {
         infractions.clear();
+    }
+
+    private List<String> componentsToUpperCase(List<String> Components){
+        List<String> upperCaseComponents = new ArrayList<>();
+        for (int i = 0; i < Components.size(); i++) {
+            if(!StringUtils.isBlank(Components.get(i))){
+                upperCaseComponents.add(Components.get(i).toUpperCase().replace("\n", "").replace("\r", ""));
+            }
+        }
+        return upperCaseComponents;
     }
 
 
