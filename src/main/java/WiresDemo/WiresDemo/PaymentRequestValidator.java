@@ -1,21 +1,32 @@
 package WiresDemo.WiresDemo;
 
+import WiresDemo.WiresDemo.model.BeneficiaryMasterData;
 import WiresDemo.WiresDemo.model.request.NoneISO.AdjustmentAmountAndReason;
 import WiresDemo.WiresDemo.model.request.NoneISO.NoneISO;
 import WiresDemo.WiresDemo.model.request.NoneISO.NoneISOCreditTransferTransactionInformation;
 import WiresDemo.WiresDemo.model.request.NoneISO.Structured;
 import WiresDemo.WiresDemo.model.request.Pacs008.Pacs008;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.prowidesoftware.swift.model.SwiftMessage;
 import com.prowidesoftware.swift.model.field.Field;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.math.NumberUtils;
-import org.springframework.stereotype.Component;
 import org.apache.commons.validator.GenericValidator;
+import org.springframework.stereotype.Component;
 
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.text.NumberFormat;
+import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Component
@@ -42,7 +53,71 @@ public class PaymentRequestValidator {
         isSenderReferenceExists(MT);
         isBankOperationCodeExists(MT);
         validateSenderTxData(MT);
+        validatePayerInfo(MT);
         return infractions;
+    }
+
+    private void validatePayerInfo(SwiftMessage mt) {
+        ObjectMapper mapper = new ObjectMapper();
+        ClassLoader classLoader = new PaymentRequestValidator().getClass().getClassLoader();
+        try {
+            File file = new File(classLoader.getResource("beneficiary_master_data.json").getFile());
+            ObjectMapper om = new ObjectMapper();
+            List<BeneficiaryMasterData> masterDataList = om.readValue(new String(Files.readAllBytes(file.toPath())), new TypeReference<List<BeneficiaryMasterData>>() {
+            });
+            Map<String, BeneficiaryMasterData> accounts = masterDataList.stream().collect(Collectors.toMap(BeneficiaryMasterData::getAccountNumber, BeneficiaryMasterData -> BeneficiaryMasterData));
+            if (mt.getBlock4() != null) {
+                if (mt.getBlock4().getFieldByName("50K") != null) {
+                    Field senderDetails = mt.getBlock4().getFieldByName("50K");
+                    if (!senderDetails.isEmpty()) {
+                        List<String> components = senderDetails.getComponents();
+                        //validate sender's account number
+                        if (accounts.containsKey(components.get(0))) {
+                            BeneficiaryMasterData masterData = accounts.get(components.get(0));
+                            //validate sender's name
+                            if (!StringUtils.equalsIgnoreCase(components.get(1), masterData.getName())) {
+                                infractions.add("E347B");
+                            }
+                            //validate sender's address
+                            if (!(StringUtils.equalsIgnoreCase(components.get(2), masterData.getAddressLine1()) &&
+                                    StringUtils.equalsIgnoreCase(components.get(3), masterData.getAddressLine2()) &&
+                                    StringUtils.equalsIgnoreCase(components.get(4), masterData.getCountry()))) {
+                                infractions.add("E347C");
+                            }
+                            //validate amount with funds for insufficient balance in sender's master bank details
+                            if (mt.getBlock4().getFieldByName("33B") != null) {
+                                Field sendersAmount = mt.getBlock4().getFieldByName("33B");
+                                if (!sendersAmount.isEmpty()) {
+                                    NumberFormat curFormatter = NumberFormat.getNumberInstance(getLocale(sendersAmount.getComponents().get(0)));
+                                    try {
+                                        if (curFormatter.parse(sendersAmount.getComponents().get(1)).doubleValue() > curFormatter.parse(masterData.getTotalAmount()).doubleValue()) {
+                                            infractions.add("E347D");
+                                        }
+                                    } catch (ParseException e) {
+                                        infractions.add("E348");
+                                    }
+
+                                }
+                            }
+                        } else {
+                            infractions.add("E347");
+                        }
+                    }
+                }
+            }
+        } catch (IOException e) {
+            infractions.add("E348");
+        }
+    }
+
+    private static Locale getLocale(String strCode) {
+        for (Locale locale : NumberFormat.getAvailableLocales()) {
+            String code = NumberFormat.getCurrencyInstance(locale).getCurrency().getCurrencyCode();
+            if (strCode.equals(code)) {
+                return locale;
+            }
+        }
+        return null;
     }
 
     private boolean validateMessageType(SwiftMessage mt) {
@@ -70,24 +145,44 @@ public class PaymentRequestValidator {
         return false;
     }
 
-    private boolean validateSenderTxData(SwiftMessage MT103) {
-        if(MT103.getBlock4() != null && MT103.getBlock4().getFieldByName("32A") != null){
-            Field senderTx = MT103.getBlock4().getFieldByName("32A");
-            if(!senderTx.isEmpty()) {
-                List<String> components = senderTx.getComponents();
-                //validate date
-                if(GenericValidator.isDate(components.get(0),"YYMMdd", true)) {
-                    return true;
+    private boolean validateSenderTxData(SwiftMessage mt) {
+        String cur32ACode = "";
+        if (mt.getBlock4() != null) {
+            if (mt.getBlock4().getFieldByName("32A") != null) {
+                Field senderTx = mt.getBlock4().getFieldByName("32A");
+                if (!senderTx.isEmpty()) {
+                    List<String> components = senderTx.getComponents();
+                    //validate date
+                    if (!GenericValidator.isDate(components.get(0), "yyMMdd", true)) {
+                        infractions.add("T50");
+                    }
+                    if (StringUtils.isNotBlank(components.get(1))) {
+                        cur32ACode = components.get(1);
+                    }
+                    //validate Amount
+                    final String regExp = "[0-9]+([,.][0-9]{1,2})?";
+                    String amount = components.get(2);
+                    if (!amount.matches(regExp)) {
+                        infractions.add("E346");
+                    }
                 }
-                infractions.add("T50");
-                //valdiate currency
-                //validate amount
+            }
+
+            //Validate existence of 36 if currency codes are not equal.
+            if (mt.getBlock4().getFieldByName("33B") != null) {
+                List<String> components = mt.getBlock4().getFieldByName("33B").getComponents();
+                if (!components.isEmpty()) {
+                    if (!StringUtils.equalsIgnoreCase(cur32ACode, components.get(0))) {
+                        if (mt.getBlock4().getFieldByName("36").isEmpty()) {
+                            infractions.add("D75");
+                        }
+                    }
+                }
             }
             return true;
         }
         return false;
     }
-
 
     private boolean unsupportedCurrency(NoneISO noneISO) {
         for(NoneISOCreditTransferTransactionInformation credit : noneISO.getNONEISOFiToFiCustomerCreditTransfer().getNoneISOCreditTransferTransactionInformation()) {
