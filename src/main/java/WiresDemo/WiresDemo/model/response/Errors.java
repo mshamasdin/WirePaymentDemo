@@ -11,7 +11,8 @@ public enum Errors {
     E347B("Sender Name is not Valid"),
     E347C("Sender Address is not Valid"),
     E347D("Insufficient funds"),
-    E349("General Exception");
+    E349("General Exception"),
+    MT019A("Aborting: Sanctions Clearance Failed");
 
     private final String msg;
 
