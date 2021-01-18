@@ -7,7 +7,7 @@
     "province" : "",
     "country" : "SWITZERLAND",
     "accountNumber" : "CH5704835098735711000",
-    "withdrawLimit" : "",
+    "withdrawLimit" : "1000000",
     "totalAmount" : "795347,75",
     "currencyCode" : "EUR"
   }

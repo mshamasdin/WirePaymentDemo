@@ -54,6 +54,8 @@ public class PaymentRequestValidator {
         }
         validateSenderTxData(MT);
         validatePayerInfo(MT);
+        System.out.println("----------List of Infractions Below: ---------");
+        System.out.println(infractions);
         return infractions;
     }
 

@@ -90,6 +90,10 @@ public class WiresDemoController {
         if(errorCodes.contains("MT019A")){  //If Sanctions Clearance Fails, abort Transaction
             transactionStatus = "ABRT";
         }
+        if(!errorCodes.isEmpty()){  //If ANY error code exists
+            transactionStatus = "RJCT";
+        }
+
         String filename = "mt199_sample.json";
         ClassLoader classLoader = new WiresDemoApplication().getClass().getClassLoader();
         File file = new File(classLoader.getResource(filename).getFile());
