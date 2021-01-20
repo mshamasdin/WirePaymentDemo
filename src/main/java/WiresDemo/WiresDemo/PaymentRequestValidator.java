@@ -1,6 +1,7 @@
 package WiresDemo.WiresDemo;
 
 import WiresDemo.WiresDemo.model.BeneficiaryMasterData;
+import WiresDemo.WiresDemo.model.SanctionsListData;
 import WiresDemo.WiresDemo.model.request.NoneISO.AdjustmentAmountAndReason;
 import WiresDemo.WiresDemo.model.request.NoneISO.NoneISO;
 import WiresDemo.WiresDemo.model.request.NoneISO.NoneISOCreditTransferTransactionInformation;
@@ -11,6 +12,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.prowidesoftware.swift.model.SwiftMessage;
 import com.prowidesoftware.swift.model.field.Field;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.math.NumberUtils;
 import org.apache.commons.validator.GenericValidator;
@@ -117,54 +120,26 @@ public class PaymentRequestValidator {
         ClassLoader classLoader = new PaymentRequestValidator().getClass().getClassLoader();
         /*try {*/
         File file = new File(classLoader.getResource("sanctions_list.json").getFile());
-        ObjectMapper objectMapper = new ObjectMapper();
-        Map<String, String> sanctionScreeningMap = objectMapper.readValue(new String(Files.readAllBytes(file.toPath())), new TypeReference<Map<String,String>>(){});
-
+        ObjectMapper om = new ObjectMapper();
+        List<SanctionsListData> sanctionList = om.readValue(new String(Files.readAllBytes(file.toPath())), new TypeReference<List<SanctionsListData>>() {
+        });
         if (mt.getBlock4() != null) {
             if (mt.getBlock4().getFieldByName("59") != null) {
                 Field receiverDetails = mt.getBlock4().getFieldByName("59");
                 if (!receiverDetails.isEmpty()) {
-                    List<String> components = receiverDetails.getComponents();
-                    List<String> upperCaseComponents = this.componentsToUpperCase(components);
+                    List<String> rxComp = receiverDetails.getComponents().stream().filter(Objects::nonNull ).collect(Collectors.toList());
                     System.out.println(">>>>");
-                    System.out.println(upperCaseComponents);
-
-                    boolean nameMatch = false;
-                    boolean countryMatch = false;
-
-
-                    for (int i = 0; i < upperCaseComponents.size(); i++) {
-                        if(StringUtils.containsIgnoreCase(upperCaseComponents.get(i), sanctionScreeningMap.get("name001"))){
-                            nameMatch = true;
+                    System.out.println(rxComp);
+                    boolean sanctionDtlsmatch = sanctionList.stream().anyMatch(sanctionData -> {
+                        if((rxComp.stream().anyMatch(t -> StringUtils.containsIgnoreCase(t,sanctionData.getName()))) &&
+                                (rxComp.stream().anyMatch(t -> StringUtils.containsIgnoreCase(t,sanctionData.getCountry())))) {
+                            infractions.add("MT019A");
+                            return true;
                         }
-                        if(StringUtils.containsIgnoreCase(upperCaseComponents.get(i), sanctionScreeningMap.get("country001"))){
-                            countryMatch = true;
-                        }
-                    }
-                    //System.out.printf("%b %b", nameMatch, countryMatch);
-
-                    if (nameMatch && countryMatch){
-                        infractions.add("MT019A");
                         return false;
-                    }else{
-                        nameMatch = false;
-                        countryMatch = false;
-                    }
-
-                    for (int i = 0; i < upperCaseComponents.size(); i++) {
-                        if(StringUtils.containsIgnoreCase(upperCaseComponents.get(i), sanctionScreeningMap.get("name002"))){
-                            nameMatch = true;
-                        }
-                        if(StringUtils.containsIgnoreCase(upperCaseComponents.get(i), sanctionScreeningMap.get("country002"))){
-                            countryMatch = true;
-                        }
-                    }
-
-                    if (nameMatch && countryMatch){
-                        infractions.add("MT019A");
+                    });
+                    if(sanctionDtlsmatch) {
                         return false;
-                    }else{
-                        return true;
                     }
                 }
             }
@@ -364,17 +339,4 @@ public class PaymentRequestValidator {
     public void clearErrorCodes() {
         infractions.clear();
     }
-
-    private List<String> componentsToUpperCase(List<String> Components){
-        List<String> upperCaseComponents = new ArrayList<>();
-        for (int i = 0; i < Components.size(); i++) {
-            if(!StringUtils.isBlank(Components.get(i))){
-                upperCaseComponents.add(Components.get(i).toUpperCase().replace("\n", "").replace("\r", ""));
-            }
-        }
-        return upperCaseComponents;
-    }
-
-
-
 }
