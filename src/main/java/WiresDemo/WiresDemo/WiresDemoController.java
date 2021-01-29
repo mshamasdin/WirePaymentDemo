@@ -83,6 +83,27 @@ public class WiresDemoController {
 
     }
 
+    @PostMapping(value = "/sanctionClearance", produces = MediaType.APPLICATION_JSON_VALUE)
+    @ApiResponses(value = {@ApiResponse(code = 200, message = ""), @ApiResponse(code = 500, message = "Internal Server Error")})
+    public Mt199 validateSanctionClearance(@Valid @RequestBody WireMT103Payload wireMT103Payload) throws IOException {
+        log.info("In service");
+        log.info("WireMT103"+ wireMT103Payload.getPayLoad());
+        //to JSON
+        SwiftParser parser = new SwiftParser(wireMT103Payload.getPayLoad());
+        SwiftMessage MT = parser.message();
+
+        log.info("WireMT103 JSON"+ MT.toJson());
+
+        List<String> errorCodes = this.paymentRequestValidator.isValidSanctionClearance(MT);
+        if (errorCodes.isEmpty()){
+            Integer fictitiousNumber = 2057542;
+            this.prepareAccountingLogs("Accounting_Logs.csv", MT, fictitiousNumber);
+            fictitiousNumber++;
+        }
+        return produceResponse(wireMT103Payload,MT,errorCodes);
+
+    }
+
     private Mt199 produceResponse(@Valid WireMT103Payload wireMT103Payload, SwiftMessage mt103, List<String> errorCodes) {
         LocalDate todayDate = LocalDate.now();
         String localDate = todayDate.format(DateTimeFormatter.ofPattern("yyyy/MM/dd"));

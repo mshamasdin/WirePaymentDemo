@@ -52,11 +52,15 @@ public class PaymentRequestValidator {
         validateMessageType(MT);
         isSenderReferenceExists(MT);
         isBankOperationCodeExists(MT);
-        if(!validateSanctionClearing(MT)){
-            return infractions;
-        }
         validateSenderTxData(MT);
         validatePayerInfo(MT);
+        System.out.println("----------List of Infractions Below: ---------");
+        System.out.println(infractions);
+        return infractions;
+    }
+
+    public List<String> isValidSanctionClearance(SwiftMessage MT) throws IOException {
+        validateSanctionClearing(MT);
         System.out.println("----------List of Infractions Below: ---------");
         System.out.println(infractions);
         return infractions;
