@@ -2,6 +2,7 @@ package WiresDemo.WiresDemo;
 
 import WiresDemo.WiresDemo.model.BeneficiaryMasterData;
 import WiresDemo.WiresDemo.model.SanctionsListData;
+import WiresDemo.WiresDemo.model.request.Mt103.SanctionRequest;
 import WiresDemo.WiresDemo.model.request.NoneISO.AdjustmentAmountAndReason;
 import WiresDemo.WiresDemo.model.request.NoneISO.NoneISO;
 import WiresDemo.WiresDemo.model.request.NoneISO.NoneISOCreditTransferTransactionInformation;
@@ -64,6 +65,35 @@ public class PaymentRequestValidator {
         System.out.println("----------List of Infractions Below: ---------");
         System.out.println(infractions);
         return infractions;
+    }
+
+    public List<String> isValidSanctionClearance(SanctionRequest request) throws IOException {
+        validateSanctionClearing(request);
+        System.out.println("----------List of Infractions Below: ---------");
+        System.out.println(infractions);
+        return infractions;
+    }
+
+    private boolean validateSanctionClearing(SanctionRequest request) throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        ClassLoader classLoader = new PaymentRequestValidator().getClass().getClassLoader();
+        /*try {*/
+        File file = new File(classLoader.getResource("sanctions_list.json").getFile());
+        ObjectMapper om = new ObjectMapper();
+        List<SanctionsListData> sanctionList = om.readValue(new String(Files.readAllBytes(file.toPath())), new TypeReference<List<SanctionsListData>>() {
+        });
+        boolean sanctionDtlsmatch = sanctionList.stream().anyMatch(sanctionData -> {
+            if(StringUtils.containsIgnoreCase(request.getName(),sanctionData.getName()) &&
+                    StringUtils.containsIgnoreCase(request.getCountry(),sanctionData.getCountry())) {
+                infractions.add("MT019A");
+                return true;
+            }
+            return false;
+        });
+        if(sanctionDtlsmatch) {
+            return false;
+        }
+        return true;
     }
 
     private void validatePayerInfo(SwiftMessage mt) {

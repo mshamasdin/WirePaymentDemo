@@ -1,6 +1,7 @@
 package WiresDemo.WiresDemo;
 
 import WiresDemo.WiresDemo.model.GroupHeader;
+import WiresDemo.WiresDemo.model.request.Mt103.SanctionRequest;
 import WiresDemo.WiresDemo.model.request.NoneISO.NoneISO;
 import WiresDemo.WiresDemo.model.request.Pacs008.Agent;
 import WiresDemo.WiresDemo.model.request.Pacs008.ClearingSystemMemberIdentification;
@@ -85,23 +86,10 @@ public class WiresDemoController {
 
     @PostMapping(value = "/sanctionClearance", produces = MediaType.APPLICATION_JSON_VALUE)
     @ApiResponses(value = {@ApiResponse(code = 200, message = ""), @ApiResponse(code = 500, message = "Internal Server Error")})
-    public Mt199 validateSanctionClearance(@Valid @RequestBody WireMT103Payload wireMT103Payload) throws IOException {
-        log.info("In service");
-        log.info("WireMT103"+ wireMT103Payload.getPayLoad());
-        //to JSON
-        SwiftParser parser = new SwiftParser(wireMT103Payload.getPayLoad());
-        SwiftMessage MT = parser.message();
+    public Mt199 validateSanctionClearance(@Valid @RequestBody SanctionRequest sanctionRequest) throws IOException {
 
-        log.info("WireMT103 JSON"+ MT.toJson());
-
-        List<String> errorCodes = this.paymentRequestValidator.isValidSanctionClearance(MT);
-        if (errorCodes.isEmpty()){
-            Integer fictitiousNumber = 2057542;
-            this.prepareAccountingLogs("Accounting_Logs.csv", MT, fictitiousNumber);
-            fictitiousNumber++;
-        }
-        return produceResponse(wireMT103Payload,MT,errorCodes);
-
+        List<String> errorCodes = this.paymentRequestValidator.isValidSanctionClearance(sanctionRequest);
+        return produceResponse(new WireMT103Payload(),new SwiftMessage(), errorCodes);
     }
 
     private Mt199 produceResponse(@Valid WireMT103Payload wireMT103Payload, SwiftMessage mt103, List<String> errorCodes) {
@@ -125,19 +113,21 @@ public class WiresDemoController {
             e.printStackTrace();
         }
         Mt199 mt199 = new Gson().fromJson(json, Mt199.class);
+        String logicalTerminal = mt103.getBlock1() != null ? mt103.getBlock1().getLogicalTerminal() : null;
+        String msgType = mt103.getType() != null ? mt103.getType() : "";
 
         GroupHeader group_header = GroupHeader.builder()
-                .message_identification(mt103.getBlock1().getLogicalTerminal())
+                .message_identification(logicalTerminal)
                 .creation_datetime(localDate)
-                .related_reference(new Related_reference().builder().swift_msg_type(mt103.getType()).build())
+                .related_reference(new Related_reference().builder().swift_msg_type(msgType).build())
                 .build();
         mt199.getWire_payment_status_report().setGroup_header(group_header);
 
         ArrayList<TransactionInformationStatus> statusList = new ArrayList<>();
         TransactionInformationStatus transactionInformationStatus = TransactionInformationStatus.builder()
                 .original_group_information(OriginalGroupInformation.builder()
-                        .original_message_identification(mt103.getBlock1().getLogicalTerminal())
-                        .original_message_name_identification(mt103.getType())
+                        .original_message_identification(logicalTerminal)
+                        .original_message_name_identification(msgType)
                         .build())
                 .transaction_status(transactionStatus)
                 .acceptance_datetime("acceptance datetime")
